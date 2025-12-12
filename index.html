@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>N42 Mailing Panel</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 16px}
+    h1{margin:0 0 10px}
+    .muted{opacity:.75}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px;margin-top:16px}
+    label{display:block;font-size:12px;opacity:.8;margin:12px 0 6px}
+    input,button{font:inherit;padding:10px 12px}
+    input[type="number"]{width:140px}
+    input[type="text"], input[type="password"]{width:min(560px,100%)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+    button{cursor:pointer}
+    pre{background:#111;color:#eee;padding:12px;overflow:auto;border-radius:10px;min-height:120px;white-space:pre-wrap}
+    .ok{color: #0a7d17; font-weight:600}
+    .bad{color: #b00020; font-weight:600}
+    .hint{font-size:13px;opacity:.85;line-height:1.4}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f2f2f2;margin-left:8px;font-size:12px}
+  </style>
+</head>
+<body>
+  <h1>N42 Mailing Panel <span class="pill">CSV → mailing</span></h1>
+  <div class="muted">Wybierz plik CSV, wpisz hasło panelu i kliknij „Wyślij”.</div>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex:1;min-width:280px">
+        <label>Plik CSV (kolumny: email,name)</label>
+        <input id="csvFile" type="file" accept=".csv,text/csv" />
+        <div class="hint">Nagłówek musi zawierać przynajmniej <b>email</b>. Przykład: <code>email,name</code></div>
+      </div>
+
+      <div>
+        <label>Batch size</label>
+        <input id="batchSize" type="number" value="30" min="1" max="40" />
+        <div class="hint">Max 40 (bezpiecznie dla Gmaila)</div>
+      </div>
+
+      <div>
+        <label>Delay (ms)</label>
+        <input id="delayMs" type="number" value="4000" min="0" max="60000" />
+        <div class="hint">3–5s zalecane</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div style="flex:1;min-width:280px">
+        <label>Temat wiadomości</label>
+        <input id="subject" type="text" value="Świąteczny klimat od N42 Group" />
+      </div>
+
+      <div style="flex:1;min-width:280px">
+        <label>Hasło panelu</label>
+        <input id="panelPass" type="password" placeholder="Wpisz hasło…" />
+        <div class="hint">To hasło dostajesz od administratora.</div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <button id="checkBtn" type="button">Sprawdź CSV</button>
+      <button id="sendBtn" type="button">Wyślij mailing</button>
+      <span id="status"></span>
+    </div>
+
+    <h3>Log</h3>
+    <pre id="log">Gotowy.</pre>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  const statusEl = $("status");
+
+  function setStatus(msg, ok=true){
+    statusEl.textContent = msg;
+    statusEl.className = ok ? "ok" : "bad";
+  }
+
+  function log(msg){
+    logEl.textContent = msg;
+  }
+
+  async function readFileText(file){
+    return await file.text();
+  }
+
+  function validateCSV(text){
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if(lines.length < 2) return { ok:false, error:"CSV ma za mało wierszy (min. 2: nagłówek + dane)." };
+    const header = lines[0].trim().toLowerCase();
+    if(!header.split(",").map(x=>x.trim()).includes("email")){
+      return { ok:false, error:"Nagłówek CSV musi zawierać kolumnę 'email'." };
+    }
+    return { ok:true, rows: lines.length - 1 };
+  }
+
+  $("checkBtn").addEventListener("click", async () => {
+    const f = $("csvFile").files?.[0];
+    if(!f) return setStatus("Wybierz plik CSV.", false);
+
+    const csv = await readFileText(f);
+    const v = validateCSV(csv);
+    if(!v.ok) return setStatus(v.error, false);
+
+    setStatus(`OK: wykryto ${v.rows} odbiorców.`, true);
+    log(csv.slice(0, 1500) + (csv.length > 1500 ? "\n...\n" : ""));
+  });
+
+  $("sendBtn").addEventListener("click", async () => {
+    const f = $("csvFile").files?.[0];
+    const pass = $("panelPass").value.trim();
+
+    if(!f) return setStatus("Wybierz plik CSV.", false);
+    if(!pass) return setStatus("Wpisz hasło panelu.", false);
+
+    const csv = await readFileText(f);
+    const v = validateCSV(csv);
+    if(!v.ok) return setStatus(v.error, false);
+
+    const batchSize = Math.min(40, Math.max(1, Number($("batchSize").value || 30)));
+    const delayMs   = Math.max(0, Number($("delayMs").value || 4000));
+    const subject   = ($("subject").value || "").trim();
+
+    const payload = { batchSize, delayMs, subject, csv };
+
+    setStatus("Wysyłam…", true);
+    log("POST /api/panel-send\n" + JSON.stringify({ ...payload, csv: `[CSV ${csv.length} znaków]` }, null, 2));
+
+    try {
+      const res = await fetch("/api/panel-send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Panel-Password": pass
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await res.text();
+
+      if(!res.ok){
+        setStatus(`Błąd HTTP ${res.status}`, false);
+        log(text);
+        return;
+      }
+
+      setStatus("Wysłane ✅", true);
+      log(text);
+    } catch (e) {
+      setStatus("Błąd połączenia.", false);
+      log(String(e));
+    }
+  });
+</script>
+</body>
+</html>
