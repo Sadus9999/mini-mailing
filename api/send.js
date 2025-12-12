@@ -12,18 +12,19 @@ function must(name) {
 }
 
 function readTemplate() {
-  return fs.readFileSync(
-    path.join(process.cwd(), "templates", "xmas.html"),
-    "utf8"
-  );
+  return fs.readFileSync(path.join(process.cwd(), "templates", "xmas.html"), "utf8");
 }
 
 function parseRecipientsFromCSV(csvText) {
-  return parse(csvText, {
-    columns: true,
-    skip_empty_lines: true,
-    trim: true,
-  });
+  return parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
+}
+
+async function readRawBody(req) {
+  let data = "";
+  for await (const chunk of req) data += chunk;
+  // usuń BOM jeśli PowerShell dodał
+  data = data.replace(/^\uFEFF/, "");
+  return data;
 }
 
 export default async function handler(req, res) {
@@ -37,7 +38,16 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "Unauthorized" });
     }
 
-    const { csv, batchSize = 30, delayMs = 4000, subject } = req.body || {};
+    const raw = await readRawBody(req);
+
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ ok: false, error: "Invalid JSON body" });
+    }
+
+    const { csv, batchSize = 30, delayMs = 4000, subject } = body || {};
     if (!csv || typeof csv !== "string") {
       return res.status(400).json({ ok: false, error: "Missing csv in body" });
     }
@@ -63,37 +73,27 @@ export default async function handler(req, res) {
     const recipients = parseRecipientsFromCSV(csv).filter((r) => r.email);
 
     let sent = 0;
-    const results = [];
 
     for (let i = 0; i < recipients.length; i += batchSize) {
       const batch = recipients.slice(i, i + batchSize);
 
       for (const r of batch) {
         const html = template.replaceAll("{{name}}", r.name || "");
-
-        try {
-          await transporter.sendMail({
-            from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-            to: r.email,
-            subject: subject || process.env.SUBJECT || "Wiadomość",
-            html,
-            text: "Świąteczna wiadomość od N42 Group.",
-          });
-
-          sent++;
-          results.push({ email: r.email, ok: true });
-        } catch (e) {
-          results.push({ email: r.email, ok: false, error: e?.message || String(e) });
-        }
-
+        await transporter.sendMail({
+          from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+          to: r.email,
+          subject: subject || process.env.SUBJECT || "Wiadomość",
+          html,
+          text: "Świąteczna wiadomość od N42 Group.",
+        });
+        sent++;
         await sleep(delayMs);
       }
 
-      // przerwa między paczkami (10s)
       if (i + batchSize < recipients.length) await sleep(10000);
     }
 
-    return res.status(200).json({ ok: true, sent, results });
+    return res.status(200).json({ ok: true, sent });
   } catch (e) {
     console.error(e);
     return res.status(500).send(e?.stack || e?.message || String(e));
