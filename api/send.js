@@ -18,11 +18,13 @@ function readTemplate() {
   );
 }
 
-function readCSV() {
-  const csv = fs.readFileSync(
-    path.join(process.cwd(), "recipients.csv"),
-    "utf8"
-  );
+function parseRecipientsFromCSV(csvText) {
+  return parse(csvText, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+  });
+}
 
   return parse(csv, {
     columns: true,
@@ -63,7 +65,11 @@ export default async function handler(req, res) {
   await transporter.verify();
 
   const template = readTemplate();
-  const recipients = readCSV();
+const { csv } = req.body || {};
+if (!csv || typeof csv !== "string") {
+  return res.status(400).json({ ok: false, error: "Missing csv in body" });
+}
+const recipients = parseRecipientsFromCSV(csv);
 
   let sent = 0;
 
