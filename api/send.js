@@ -1,31 +1,51 @@
 import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
+import { parse } from "csv-parse/sync";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function readTemplate() {
-  const p = path.join(process.cwd(), "templates", "xmas.html");
-  return fs.readFileSync(p, "utf8");
-}
-
-function must(envName) {
-  const v = process.env[envName];
-  if (!v) throw new Error(`Missing env: ${envName}`);
+function must(name) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env: ${name}`);
   return v;
 }
 
+function readTemplate() {
+  return fs.readFileSync(
+    path.join(process.cwd(), "templates", "xmas.html"),
+    "utf8"
+  );
+}
+
+function readCSV() {
+  const csv = fs.readFileSync(
+    path.join(process.cwd(), "recipients.csv"),
+    "utf8"
+  );
+
+  return parse(csv, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+  });
+}
+
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
-
-  const auth = req.headers["authorization"] || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (token !== process.env.SEND_TOKEN) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-  const { subject, fromName, fromEmail, recipients, delayMs = 2500 } = req.body || {};
-  if (!Array.isArray(recipients) || recipients.length === 0) {
-    return res.status(400).json({ ok: false, error: "recipients[] required" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "POST only" });
   }
+
+  const auth = req.headers.authorization || "";
+  if (auth !== `Bearer ${process.env.SEND_TOKEN}`) {
+    return res.status(401).json({ ok: false, error: "Unauthorized" });
+  }
+
+  const {
+    delayMs = 4000,
+    batchSize = 30,
+    subject = process.env.SUBJECT,
+  } = req.body || {};
 
   const SMTP_HOST = must("SMTP_HOST");
   const SMTP_PORT = Number(must("SMTP_PORT"));
@@ -37,37 +57,39 @@ export default async function handler(req, res) {
     port: SMTP_PORT,
     secure: false,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    tls: { minVersion: "TLSv1.2" }
+    tls: { minVersion: "TLSv1.2" },
   });
 
-  const tpl = readTemplate();
+  await transporter.verify();
 
-  const results = [];
-  for (let i = 0; i < recipients.length; i++) {
-    const { email, name } = recipients[i] || {};
-    if (!email) {
-      results.push({ email: null, ok: false, error: "Missing email" });
-      continue;
-    }
+  const template = readTemplate();
+  const recipients = readCSV();
 
-    const html = tpl.replaceAll("{{name}}", name || "");
+  let sent = 0;
 
-    try {
+  for (let i = 0; i < recipients.length; i += batchSize) {
+    const batch = recipients.slice(i, i + batchSize);
+
+    for (const r of batch) {
+      if (!r.email) continue;
+
+      const html = template.replaceAll("{{name}}", r.name || "");
+
       await transporter.sendMail({
-        from: `"${fromName || process.env.FROM_NAME || "N42 Group"}" <${fromEmail || process.env.FROM_EMAIL || SMTP_USER}>`,
-        to: email,
-        subject: subject || process.env.SUBJECT || "Wiadomość",
+        from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
+        to: r.email,
+        subject,
         html,
-        text: "Wersja tekstowa: Świąteczna wiadomość od N42 Group."
+        text: "Świąteczna wiadomość od N42 Group",
       });
 
-      results.push({ email, ok: true });
-    } catch (e) {
-      results.push({ email, ok: false, error: e?.message || String(e) });
+      sent++;
+      await sleep(delayMs);
     }
 
-    if (i < recipients.length - 1) await sleep(delayMs);
+    // przerwa między paczkami
+    await sleep(10000);
   }
 
-  return res.status(200).json({ ok: true, sent: results });
+  return res.json({ ok: true, sent });
 }
