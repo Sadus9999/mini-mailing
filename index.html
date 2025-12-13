@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>N42 Mailing Panel</title>
+  <style>
+    :root{
+      --border:#e5e5e5;
+      --bg:#fff;
+      --muted:rgba(0,0,0,.7);
+      --ok:#0a7d17;
+      --bad:#b00020;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family:system-ui,Segoe UI,Arial,sans-serif;
+      max-width:980px;
+      margin:40px auto;
+      padding:0 16px;
+      background:var(--bg);
+      color:#111;
+    }
+    h1{margin:0 0 10px}
+    .muted{color:var(--muted); line-height:1.4}
+    .pill{
+      display:inline-block;
+      padding:2px 10px;
+      border-radius:999px;
+      background:#f3f3f3;
+      margin-left:8px;
+      font-size:12px;
+      vertical-align:middle;
+      color:#333;
+    }
+    .card{
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      margin-top:16px;
+    }
+
+    .grid-2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      align-items:start;
+      margin-top:12px;
+    }
+
+    label{
+      display:block;
+      font-size:12px;
+      opacity:.8;
+      margin:12px 0 6px;
+    }
+    .field{min-width:0}
+    input,button{
+      font:inherit;
+      padding:10px 12px;
+      width:100%;
+    }
+
+    button{
+      cursor:pointer;
+      border:1px solid #111;
+      background:#111;
+      color:#fff;
+      border-radius:10px;
+      padding:10px 14px;
+      width:auto;
+    }
+    button:disabled{opacity:.55; cursor:not-allowed}
+
+    #status.ok{color:var(--ok); font-weight:700}
+    #status.bad{color:var(--bad); font-weight:700}
+
+    /* Dropzone */
+    .dropzone{
+      border:2px dashed #cfcfcf;
+      border-radius:12px;
+      padding:22px;
+      min-height:92px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      background:#fafafa;
+      transition: transform .08s ease, border-color .08s ease, background .08s ease;
+      user-select:none;
+      cursor:pointer;
+    }
+    .dropzone:hover{
+      border-color:#b8b8b8;
+      background:#f6f6f6;
+    }
+    .dropzone.dragover{
+      border-color:#111;
+      background:#f1f1f1;
+      transform: scale(1.01);
+    }
+    .dz-text{
+      color:#444;
+      line-height:1.35;
+      font-size:14px;
+    }
+    .dz-text b{font-weight:700}
+    .dz-sub{
+      display:block;
+      margin-top:6px;
+      font-size:12px;
+      opacity:.75;
+    }
+    .file-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:10px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      font-size:13px;
+      width:fit-content;
+      max-width:100%;
+    }
+    .file-pill span{
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width: 100%;
+      display:inline-block;
+    }
+    .hint{
+      font-size:13px;
+      opacity:.85;
+      line-height:1.4;
+      margin-top:8px;
+      min-height:18px;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-top:14px;
+    }
+
+    .log-wrap{margin-top:14px; display:none;}
+    .log-wrap.show{display:block;}
+    pre{
+      background:#111;
+      color:#eee;
+      padding:12px;
+      overflow:auto;
+      border-radius:10px;
+      min-height:120px;
+      white-space:pre-wrap;
+      word-break:break-word;
+      font-family:var(--mono);
+      font-size:12px;
+      margin:0;
+    }
+
+    @media (max-width: 1280px){
+      .grid-2{grid-template-columns: 1fr} 
+      .grid-2{ gap: 0px; }
+      .grid-2 .field{ margin-bottom: 0; }
+       button{width:100%}
+    }
+@media (min-width: 1281px){
+  .actions{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    align-items:center;
+  }
+
+  #sendBtn{
+    grid-column: 2;
+    width:100%;
+    max-width:none;
+  }
+
+  #status{
+    grid-column: 1;
+    justify-self:start;
+  }
+}
+
+  </style>
+</head>
+<body>
+  <h1>N42 Mailing Panel <span class="pill">CSV → mailing</span></h1>
+
+
+  <div class="muted">Wgraj plik mailingu i CSV</div>
+
+  <div class="card">
+<!-- Mailing HTML upload -->
+<input id="mailFile" type="file" accept=".html,text/html" hidden />
+<div id="mailDropzone" class="dropzone" role="button" tabindex="0" aria-label="Wgraj plik HTML mailingu" style="margin-top:12px;">
+  <div class="dz-text">
+    <b>Przeciągnij tu</b> lub <b>wybierz plik HTML</b>
+    <span class="dz-sub">Plik z gotowym mailem (np. newsletter.html)</span>
+  </div>
+</div>
+
+<div id="mailFileInfo" class="file-pill" style="display:none;">
+  <strong>Mail:</strong> <span id="mailFileName"></span>
+</div>
+
+<div class="hint" id="mailHint">Nie wgrano mailingu HTML.</div>
+    <!-- Dropzone -->
+    <input id="csvFile" type="file" accept=".csv,text/csv" hidden />
+    <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Wgraj plik CSV">
+      <div class="dz-text">
+        <b>Przeciągnij tu</b> lub <b>wybierz plik CSV</b>
+        <span class="dz-sub">Format: nagłówek <code>email,name</code> (name opcjonalnie)</span>
+      </div>
+    </div>
+
+    <div id="fileInfo" class="file-pill" style="display:none;">
+      <strong>Plik:</strong> <span id="fileName"></span>
+    </div>
+
+    <div class="hint" id="csvHint">Nie wgrano pliku.</div>
+
+    <!-- Temat + hasło -->
+    <div class="grid-2">
+      <div class="field">
+        <label>Temat wiadomości</label>
+        <input id="subject" type="text" value="Świąteczny klimat od N42 Group" />
+      </div>
+
+      <div class="field">
+        <label>Hasło panelu</label>
+        <input id="panelPass" type="password" placeholder="Wpisz hasło…" />
+        <div class="hint">Hasło dostajesz od administratora.</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="sendBtn" type="button" disabled>Wyślij mailing</button>
+      <span id="status"></span>
+    </div>
+
+    <div id="logWrap" class="log-wrap">
+      <pre id="log"></pre>
+    </div>
+  </div>
+
+<script>
+  // Stałe parametry (mniej pól do wpisywania)
+  const DEFAULT_BATCH_SIZE = 30;
+  const DEFAULT_DELAY_MS   = 4000;
+
+  const $ = (id) => document.getElementById(id);
+
+  // CSV
+  const dropzone   = $("dropzone");
+  const fileInput  = $("csvFile");
+  const fileInfo   = $("fileInfo");
+  const fileNameEl = $("fileName");
+  const csvHint    = $("csvHint");
+
+  // MAIL HTML
+  const mailDropzone    = $("mailDropzone");
+  const mailInput       = $("mailFile");
+  const mailFileInfo    = $("mailFileInfo");
+  const mailFileNameEl  = $("mailFileName");
+  const mailHint        = $("mailHint");
+
+  // UI
+  const sendBtn   = $("sendBtn");
+  const statusEl  = $("status");
+  const logWrap   = $("logWrap");
+  const logEl     = $("log");
+
+  let currentCSVText  = "";
+  let currentRows     = 0;
+  let currentHTMLText = "";
+
+  function setStatus(msg, ok=true){
+    statusEl.textContent = msg;
+    statusEl.className = ok ? "ok" : "bad";
+  }
+
+  function hideLog(){
+    logWrap.classList.remove("show");
+    logEl.textContent = "";
+  }
+
+  function showLog(text){
+    logEl.textContent = text;
+    logWrap.classList.add("show");
+  }
+
+  function updateSendEnabled(){
+    // Wysyłka dopiero jak mamy i CSV i HTML
+    sendBtn.disabled = !(currentCSVText && currentHTMLText);
+  }
+
+  function validateCSV(text){
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if(lines.length < 2) return { ok:false, error:"CSV ma za mało wierszy (min. 2: nagłówek + dane)." };
+    const header = lines[0].trim().toLowerCase();
+    const cols = header.split(",").map(x=>x.trim());
+    if(!cols.includes("email")) return { ok:false, error:"Nagłówek CSV musi zawierać kolumnę 'email'." };
+    return { ok:true, rows: lines.length - 1 };
+  }
+
+  function validateHTML(text){
+    const t = (text || "").trim();
+    if(!t) return { ok:false, error:"Plik HTML jest pusty." };
+
+    const low = t.toLowerCase();
+    const looks =
+      low.includes("<html") ||
+      low.includes("<body") ||
+      low.includes("<table") ||
+      low.includes("<div");
+
+    if(!looks) return { ok:false, error:"To nie wygląda jak HTML maila." };
+    return { ok:true };
+  }
+
+  async function handleCSVFile(file){
+    hideLog();
+    setStatus("", true);
+
+    if(!file){
+      currentCSVText = "";
+      currentRows = 0;
+      csvHint.textContent = "Nie wgrano pliku.";
+      csvHint.style.color = "var(--muted)";
+      fileInfo.style.display = "none";
+      updateSendEnabled();
+      return;
+    }
+
+    fileNameEl.textContent = file.name;
+    fileInfo.style.display = "inline-flex";
+
+    const text = await file.text();
+    const v = validateCSV(text);
+
+    if(!v.ok){
+      currentCSVText = "";
+      currentRows = 0;
+      csvHint.textContent = "Błąd: " + v.error;
+      csvHint.style.color = "var(--bad)";
+      updateSendEnabled();
+      return;
+    }
+
+    currentCSVText = text;
+    currentRows = v.rows;
+    csvHint.textContent = `OK: wykryto ${v.rows} odbiorców.`;
+    csvHint.style.color = "var(--ok)";
+    updateSendEnabled();
+  }
+
+  async function handleMailFile(file){
+    hideLog();
+    setStatus("", true);
+
+    if(!file){
+      currentHTMLText = "";
+      mailHint.textContent = "Nie wgrano mailingu HTML.";
+      mailHint.style.color = "var(--muted)";
+      mailFileInfo.style.display = "none";
+      updateSendEnabled();
+      return;
+    }
+
+    mailFileNameEl.textContent = file.name;
+    mailFileInfo.style.display = "inline-flex";
+
+    const text = await file.text();
+    const v = validateHTML(text);
+
+    if(!v.ok){
+      currentHTMLText = "";
+      mailHint.textContent = "Błąd: " + v.error;
+      mailHint.style.color = "var(--bad)";
+      updateSendEnabled();
+      return;
+    }
+
+    currentHTMLText = text;
+    mailHint.textContent = "OK: wgrano mailing HTML.";
+    mailHint.style.color = "var(--ok)";
+    updateSendEnabled();
+  }
+
+  // ===== CSV: click/keyboard -> open picker =====
+  function openCSVMailPicker(){
+    fileInput.value = "";
+    fileInput.click();
+  }
+
+  dropzone.addEventListener("click", openCSVMailPicker);
+  dropzone.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      openCSVMailPicker();
+    }
+  });
+
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files?.[0];
+    await handleCSVFile(f);
+  });
+
+  dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+  dropzone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files?.[0];
+    if(!f) return;
+    if(!f.name.toLowerCase().endsWith(".csv")){
+      setStatus("To nie wygląda jak CSV.", false);
+      showLog("Wgraj plik z rozszerzeniem .csv");
+      return;
+    }
+    await handleCSVFile(f);
+  });
+
+  // ===== MAIL HTML: click/keyboard -> open picker =====
+  function openMailPicker(){
+    mailInput.value = "";
+    mailInput.click();
+  }
+
+  mailDropzone.addEventListener("click", openMailPicker);
+  mailDropzone.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      openMailPicker();
+    }
+  });
+
+  mailInput.addEventListener("change", async () => {
+    const f = mailInput.files?.[0];
+    await handleMailFile(f);
+  });
+
+  mailDropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    mailDropzone.classList.add("dragover");
+  });
+  mailDropzone.addEventListener("dragleave", () => {
+    mailDropzone.classList.remove("dragover");
+  });
+  mailDropzone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    mailDropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files?.[0];
+    if(!f) return;
+
+    const name = f.name.toLowerCase();
+    if(!(name.endsWith(".html") || name.endsWith(".htm"))){
+      setStatus("To nie jest HTML.", false);
+      showLog("Wgraj plik .html / .htm");
+      return;
+    }
+    await handleMailFile(f);
+  });
+
+  // ===== Send =====
+  sendBtn.addEventListener("click", async () => {
+    hideLog();
+    const pass = $("panelPass").value.trim();
+    const subject = ($("subject").value || "").trim();
+
+    if(!currentHTMLText){
+      setStatus("Wgraj plik HTML mailingu.", false);
+      return;
+    }
+    if(!currentCSVText){
+      setStatus("Wgraj poprawny plik CSV.", false);
+      return;
+    }
+    if(!pass){
+      setStatus("Wpisz hasło panelu.", false);
+      return;
+    }
+
+    const payload = {
+      batchSize: DEFAULT_BATCH_SIZE,
+      delayMs: DEFAULT_DELAY_MS,
+      subject,
+      csv: currentCSVText,
+      html: currentHTMLText
+    };
+
+    sendBtn.disabled = true;
+    setStatus(`Wysyłam… (${currentRows} odbiorców)`, true);
+
+    try{
+      const res = await fetch("/api/panel-send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Panel-Password": pass
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await res.text();
+
+      if(!res.ok){
+        setStatus(`Błąd HTTP ${res.status}`, false);
+        showLog(text);
+        updateSendEnabled();
+        return;
+      }
+
+      setStatus("Wysłane ✅", true);
+      showLog(text);
+
+    } catch(e){
+      setStatus("Błąd połączenia.", false);
+      showLog(String(e));
+      updateSendEnabled();
+    }
+  });
+
+  // Init
+  hideLog();
+  updateSendEnabled();
+</script>
+</body>
+</html>
