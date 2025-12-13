@@ -28,14 +28,18 @@ export default async function handler(req, res) {
     }
 
     // AUTH: pasuje do panelu (header X-Panel-Password)
-    const pass = (req.headers["x-panel-password"] || "").toString();
-    if (!process.env.SEND_TOKEN) {
-      return res.status(500).json({ ok: false, error: "Missing env: SEND_TOKEN" });
-    }
-    if (pass !== process.env.SEND_TOKEN) {
-      return res.status(401).json({ ok: false, error: "Unauthorized" });
-    }
+const token = (process.env.SEND_TOKEN || "").toString();
+const passHeader = (req.headers["x-panel-password"] || "").toString();
+const auth = (req.headers.authorization || "").toString();
+const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
+if (!token) {
+  return res.status(500).json({ ok: false, error: "Missing env: SEND_TOKEN" });
+}
+
+if (passHeader !== token && bearer !== token) {
+  return res.status(401).json({ ok: false, error: "Unauthorized" });
+}
     const raw = await readRawBody(req);
 
     let body;
