@@ -41,25 +41,12 @@
       margin-top:16px;
     }
 
-    /* ✅ GRID zamiast flex-wrap */
-    .grid{
-      display:grid;
-      grid-template-columns: 1.4fr 0.6fr 0.6fr;
-      gap:12px;
-      align-items:end;
-    }
     .grid-2{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap:12px;
-      align-items:end;
-      margin-top:10px;
-    }
-    .grid-1{
-      display:grid;
-      grid-template-columns: 1fr;
-      gap:12px;
-      margin-top:10px;
+      align-items:start;
+      margin-top:12px;
     }
 
     label{
@@ -68,40 +55,89 @@
       opacity:.8;
       margin:12px 0 6px;
     }
-    .field{min-width:0} /* ważne w gridzie */
+    .field{min-width:0}
     input,button{
       font:inherit;
       padding:10px 12px;
       width:100%;
     }
-    input[type="number"]{max-width:160px}
+
     button{
       cursor:pointer;
-      width:auto;
       border:1px solid #111;
       background:#111;
       color:#fff;
       border-radius:10px;
       padding:10px 14px;
+      width:auto;
     }
-    button.secondary{
-      background:#fff;
-      color:#111;
-      border:1px solid var(--border);
-    }
-    button:disabled{
-      opacity:.6;
-      cursor:not-allowed;
-    }
+    button:disabled{opacity:.55; cursor:not-allowed}
 
-      .hint{
-  font-size:13px;
-  opacity:.85;
-  line-height:1.4;
-  margin-top:6px;
-  min-height: 18px;
+    #status.ok{color:var(--ok); font-weight:700}
+    #status.bad{color:var(--bad); font-weight:700}
+
+    /* Dropzone */
+    .dropzone{
+      border:2px dashed #cfcfcf;
+      border-radius:12px;
+      padding:22px;
+      min-height:92px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      background:#fafafa;
+      transition: transform .08s ease, border-color .08s ease, background .08s ease;
+      user-select:none;
+      cursor:pointer;
     }
-    code{font-family:var(--mono); font-size:12px}
+    .dropzone:hover{
+      border-color:#b8b8b8;
+      background:#f6f6f6;
+    }
+    .dropzone.dragover{
+      border-color:#111;
+      background:#f1f1f1;
+      transform: scale(1.01);
+    }
+    .dz-text{
+      color:#444;
+      line-height:1.35;
+      font-size:14px;
+    }
+    .dz-text b{font-weight:700}
+    .dz-sub{
+      display:block;
+      margin-top:6px;
+      font-size:12px;
+      opacity:.75;
+    }
+    .file-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:10px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      font-size:13px;
+      width:fit-content;
+      max-width:100%;
+    }
+    .file-pill span{
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      max-width: 100%;
+      display:inline-block;
+    }
+    .hint{
+      font-size:13px;
+      opacity:.85;
+      line-height:1.4;
+      margin-top:8px;
+      min-height:18px;
+    }
 
     .actions{
       display:flex;
@@ -111,9 +147,8 @@
       margin-top:14px;
     }
 
-    #status.ok{color:var(--ok); font-weight:700}
-    #status.bad{color:var(--bad); font-weight:700}
-
+    .log-wrap{margin-top:14px; display:none;}
+    .log-wrap.show{display:block;}
     pre{
       background:#111;
       color:#eee;
@@ -125,50 +160,77 @@
       word-break:break-word;
       font-family:var(--mono);
       font-size:12px;
+      margin:0;
     }
 
-    /* ✅ Responsywność: wszystko w 1 kolumnie na wąskich ekranach */
-    @media (max-width: 820px){
-      .grid{grid-template-columns: 1fr}
-      .grid-2{grid-template-columns: 1fr}
-      input[type="number"]{max-width:none}
-      button{width:100%}
-      .actions{gap:8px}
+    @media (max-width: 1280px){
+      .grid-2{grid-template-columns: 1fr} 
+      .grid-2{ gap: 0px; }
+      .grid-2 .field{ margin-bottom: 0; }
+       button{width:100%}
     }
+@media (min-width: 1281px){
+  .actions{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    align-items:center;
+  }
+
+  #sendBtn{
+    grid-column: 2;
+    width:100%;
+    max-width:none;
+  }
+
+  #status{
+    grid-column: 1;
+    justify-self:start;
+  }
+}
+
   </style>
 </head>
 <body>
   <h1>N42 Mailing Panel <span class="pill">CSV → mailing</span></h1>
-  <div class="muted">Wybierz plik CSV, ustaw parametry, wpisz hasło panelu i kliknij „Wyślij”.</div>
+
+
+  <div class="muted">Wgraj plik mailingu i CSV</div>
 
   <div class="card">
-    <!-- Rząd 1 -->
-    <div class="grid">
-      <div class="field">
-        <label>Plik CSV (kolumny: email,name)</label>
-        <input id="csvFile" type="file" accept=".csv,text/csv" />
-        <div class="hint">Nagłówek musi zawierać przynajmniej <b>email</b>. Przykład: <code>email,name</code></div>
-      </div>
+<!-- Mailing HTML upload -->
+<input id="mailFile" type="file" accept=".html,text/html" hidden />
+<div id="mailDropzone" class="dropzone" role="button" tabindex="0" aria-label="Wgraj plik HTML mailingu" style="margin-top:12px;">
+  <div class="dz-text">
+    <b>Przeciągnij tu</b> lub <b>wybierz plik HTML</b>
+    <span class="dz-sub">Plik z gotowym mailem (np. newsletter.html)</span>
+  </div>
+</div>
 
-      <div class="field">
-        <label>Batch size</label>
-        <input id="batchSize" type="number" value="30" min="1" max="40" />
-        <div class="hint">Max 40</div>
-      </div>
+<div id="mailFileInfo" class="file-pill" style="display:none;">
+  <strong>Mail:</strong> <span id="mailFileName"></span>
+</div>
 
-      <div class="field">
-        <label>Delay (ms)</label>
-        <input id="delayMs" type="number" value="4000" min="0" max="60000" />
-        <div class="hint">3–5s zalecane</div>
+<div class="hint" id="mailHint">Nie wgrano mailingu HTML.</div>
+    <!-- Dropzone -->
+    <input id="csvFile" type="file" accept=".csv,text/csv" hidden />
+    <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Wgraj plik CSV">
+      <div class="dz-text">
+        <b>Przeciągnij tu</b> lub <b>wybierz plik CSV</b>
+        <span class="dz-sub">Format: nagłówek <code>email,name</code> (name opcjonalnie)</span>
       </div>
     </div>
 
-    <!-- Rząd 2 (tu był problem nakładania) -->
+    <div id="fileInfo" class="file-pill" style="display:none;">
+      <strong>Plik:</strong> <span id="fileName"></span>
+    </div>
+
+    <div class="hint" id="csvHint">Nie wgrano pliku.</div>
+
+    <!-- Temat + hasło -->
     <div class="grid-2">
       <div class="field">
         <label>Temat wiadomości</label>
         <input id="subject" type="text" value="Świąteczny klimat od N42 Group" />
-<div class="hint">&nbsp;</div>
       </div>
 
       <div class="field">
@@ -178,29 +240,66 @@
       </div>
     </div>
 
-    <!-- Akcje -->
     <div class="actions">
-      <button id="checkBtn" class="secondary" type="button">Sprawdź CSV</button>
-      <button id="sendBtn" type="button">Wyślij mailing</button>
+      <button id="sendBtn" type="button" disabled>Wyślij mailing</button>
       <span id="status"></span>
     </div>
 
-    <h3>Log</h3>
-    <pre id="log">Gotowy.</pre>
+    <div id="logWrap" class="log-wrap">
+      <pre id="log"></pre>
+    </div>
   </div>
 
 <script>
+  // Stałe parametry (mniej pól do wpisywania)
+  const DEFAULT_BATCH_SIZE = 30;
+  const DEFAULT_DELAY_MS   = 4000;
+
   const $ = (id) => document.getElementById(id);
-  const logEl = $("log");
-  const statusEl = $("status");
+
+  // CSV
+  const dropzone   = $("dropzone");
+  const fileInput  = $("csvFile");
+  const fileInfo   = $("fileInfo");
+  const fileNameEl = $("fileName");
+  const csvHint    = $("csvHint");
+
+  // MAIL HTML
+  const mailDropzone    = $("mailDropzone");
+  const mailInput       = $("mailFile");
+  const mailFileInfo    = $("mailFileInfo");
+  const mailFileNameEl  = $("mailFileName");
+  const mailHint        = $("mailHint");
+
+  // UI
+  const sendBtn   = $("sendBtn");
+  const statusEl  = $("status");
+  const logWrap   = $("logWrap");
+  const logEl     = $("log");
+
+  let currentCSVText  = "";
+  let currentRows     = 0;
+  let currentHTMLText = "";
 
   function setStatus(msg, ok=true){
     statusEl.textContent = msg;
     statusEl.className = ok ? "ok" : "bad";
   }
-  function log(msg){ logEl.textContent = msg; }
 
-  async function readFileText(file){ return await file.text(); }
+  function hideLog(){
+    logWrap.classList.remove("show");
+    logEl.textContent = "";
+  }
+
+  function showLog(text){
+    logEl.textContent = text;
+    logWrap.classList.add("show");
+  }
+
+  function updateSendEnabled(){
+    // Wysyłka dopiero jak mamy i CSV i HTML
+    sendBtn.disabled = !(currentCSVText && currentHTMLText);
+  }
 
   function validateCSV(text){
     const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
@@ -211,39 +310,201 @@
     return { ok:true, rows: lines.length - 1 };
   }
 
-  $("checkBtn").addEventListener("click", async () => {
-    const f = $("csvFile").files?.[0];
-    if(!f) return setStatus("Wybierz plik CSV.", false);
+  function validateHTML(text){
+    const t = (text || "").trim();
+    if(!t) return { ok:false, error:"Plik HTML jest pusty." };
 
-    const csv = await readFileText(f);
-    const v = validateCSV(csv);
-    if(!v.ok) return setStatus(v.error, false);
+    const low = t.toLowerCase();
+    const looks =
+      low.includes("<html") ||
+      low.includes("<body") ||
+      low.includes("<table") ||
+      low.includes("<div");
 
-    setStatus(`OK: wykryto ${v.rows} odbiorców.`, true);
-    log(csv.slice(0, 1500) + (csv.length > 1500 ? "\n...\n" : ""));
+    if(!looks) return { ok:false, error:"To nie wygląda jak HTML maila." };
+    return { ok:true };
+  }
+
+  async function handleCSVFile(file){
+    hideLog();
+    setStatus("", true);
+
+    if(!file){
+      currentCSVText = "";
+      currentRows = 0;
+      csvHint.textContent = "Nie wgrano pliku.";
+      csvHint.style.color = "var(--muted)";
+      fileInfo.style.display = "none";
+      updateSendEnabled();
+      return;
+    }
+
+    fileNameEl.textContent = file.name;
+    fileInfo.style.display = "inline-flex";
+
+    const text = await file.text();
+    const v = validateCSV(text);
+
+    if(!v.ok){
+      currentCSVText = "";
+      currentRows = 0;
+      csvHint.textContent = "Błąd: " + v.error;
+      csvHint.style.color = "var(--bad)";
+      updateSendEnabled();
+      return;
+    }
+
+    currentCSVText = text;
+    currentRows = v.rows;
+    csvHint.textContent = `OK: wykryto ${v.rows} odbiorców.`;
+    csvHint.style.color = "var(--ok)";
+    updateSendEnabled();
+  }
+
+  async function handleMailFile(file){
+    hideLog();
+    setStatus("", true);
+
+    if(!file){
+      currentHTMLText = "";
+      mailHint.textContent = "Nie wgrano mailingu HTML.";
+      mailHint.style.color = "var(--muted)";
+      mailFileInfo.style.display = "none";
+      updateSendEnabled();
+      return;
+    }
+
+    mailFileNameEl.textContent = file.name;
+    mailFileInfo.style.display = "inline-flex";
+
+    const text = await file.text();
+    const v = validateHTML(text);
+
+    if(!v.ok){
+      currentHTMLText = "";
+      mailHint.textContent = "Błąd: " + v.error;
+      mailHint.style.color = "var(--bad)";
+      updateSendEnabled();
+      return;
+    }
+
+    currentHTMLText = text;
+    mailHint.textContent = "OK: wgrano mailing HTML.";
+    mailHint.style.color = "var(--ok)";
+    updateSendEnabled();
+  }
+
+  // ===== CSV: click/keyboard -> open picker =====
+  function openCSVMailPicker(){
+    fileInput.value = "";
+    fileInput.click();
+  }
+
+  dropzone.addEventListener("click", openCSVMailPicker);
+  dropzone.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      openCSVMailPicker();
+    }
   });
 
-  $("sendBtn").addEventListener("click", async () => {
-    const f = $("csvFile").files?.[0];
+  fileInput.addEventListener("change", async () => {
+    const f = fileInput.files?.[0];
+    await handleCSVFile(f);
+  });
+
+  dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+  dropzone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files?.[0];
+    if(!f) return;
+    if(!f.name.toLowerCase().endsWith(".csv")){
+      setStatus("To nie wygląda jak CSV.", false);
+      showLog("Wgraj plik z rozszerzeniem .csv");
+      return;
+    }
+    await handleCSVFile(f);
+  });
+
+  // ===== MAIL HTML: click/keyboard -> open picker =====
+  function openMailPicker(){
+    mailInput.value = "";
+    mailInput.click();
+  }
+
+  mailDropzone.addEventListener("click", openMailPicker);
+  mailDropzone.addEventListener("keydown", (e) => {
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      openMailPicker();
+    }
+  });
+
+  mailInput.addEventListener("change", async () => {
+    const f = mailInput.files?.[0];
+    await handleMailFile(f);
+  });
+
+  mailDropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    mailDropzone.classList.add("dragover");
+  });
+  mailDropzone.addEventListener("dragleave", () => {
+    mailDropzone.classList.remove("dragover");
+  });
+  mailDropzone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    mailDropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files?.[0];
+    if(!f) return;
+
+    const name = f.name.toLowerCase();
+    if(!(name.endsWith(".html") || name.endsWith(".htm"))){
+      setStatus("To nie jest HTML.", false);
+      showLog("Wgraj plik .html / .htm");
+      return;
+    }
+    await handleMailFile(f);
+  });
+
+  // ===== Send =====
+  sendBtn.addEventListener("click", async () => {
+    hideLog();
     const pass = $("panelPass").value.trim();
+    const subject = ($("subject").value || "").trim();
 
-    if(!f) return setStatus("Wybierz plik CSV.", false);
-    if(!pass) return setStatus("Wpisz hasło panelu.", false);
+    if(!currentHTMLText){
+      setStatus("Wgraj plik HTML mailingu.", false);
+      return;
+    }
+    if(!currentCSVText){
+      setStatus("Wgraj poprawny plik CSV.", false);
+      return;
+    }
+    if(!pass){
+      setStatus("Wpisz hasło panelu.", false);
+      return;
+    }
 
-    const csv = await readFileText(f);
-    const v = validateCSV(csv);
-    if(!v.ok) return setStatus(v.error, false);
+    const payload = {
+      batchSize: DEFAULT_BATCH_SIZE,
+      delayMs: DEFAULT_DELAY_MS,
+      subject,
+      csv: currentCSVText,
+      html: currentHTMLText
+    };
 
-    const batchSize = Math.min(40, Math.max(1, Number($("batchSize").value || 30)));
-    const delayMs   = Math.max(0, Number($("delayMs").value || 4000));
-    const subject   = ($("subject").value || "").trim();
+    sendBtn.disabled = true;
+    setStatus(`Wysyłam… (${currentRows} odbiorców)`, true);
 
-    const payload = { batchSize, delayMs, subject, csv };
-
-    setStatus("Wysyłam…", true);
-    log("POST /api/panel-send\n" + JSON.stringify({ ...payload, csv: `[CSV ${csv.length} znaków]` }, null, 2));
-
-    try {
+    try{
       const res = await fetch("/api/panel-send", {
         method: "POST",
         headers: {
@@ -257,17 +518,24 @@
 
       if(!res.ok){
         setStatus(`Błąd HTTP ${res.status}`, false);
-        log(text);
+        showLog(text);
+        updateSendEnabled();
         return;
       }
 
       setStatus("Wysłane ✅", true);
-      log(text);
-    } catch (e) {
+      showLog(text);
+
+    } catch(e){
       setStatus("Błąd połączenia.", false);
-      log(String(e));
+      showLog(String(e));
+      updateSendEnabled();
     }
   });
+
+  // Init
+  hideLog();
+  updateSendEnabled();
 </script>
 </body>
 </html>
