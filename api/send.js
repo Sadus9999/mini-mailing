@@ -8,8 +8,21 @@ function must(name) {
   return v;
 }
 
+function detectDelimiter(text) {
+  const firstLine = (text || "").split(/\r?\n/)[0] || "";
+  const commas = (firstLine.match(/,/g) || []).length;
+  const semicolons = (firstLine.match(/;/g) || []).length;
+  return semicolons > commas ? ";" : ",";
+}
+
 function parseRecipientsFromCSV(csvText) {
-  return parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
+  const delimiter = detectDelimiter(csvText);
+  return parse(csvText, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    delimiter,
+  });
 }
 
 async function readRawBody(req) {
@@ -167,5 +180,6 @@ export default async function handler(req, res) {
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
 
 
