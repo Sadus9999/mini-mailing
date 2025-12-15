@@ -1,4 +1,3 @@
-import nodemailer from "nodemailer";
 import { parse } from "csv-parse/sync";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -16,101 +15,68 @@ function parseRecipientsFromCSV(csvText) {
 async function readRawBody(req) {
   let data = "";
   for await (const chunk of req) data += chunk;
-  // usuń BOM jeśli PowerShell dodał
-  data = data.replace(/^\uFEFF/, "");
+  data = data.replace(/^\uFEFF/, ""); // usuń BOM
   return data;
 }
 
-export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ ok: false, error: "POST only" });
-    }
+// Prosty cache tokenu (działa w ramach "ciepłego" serverless)
+let tokenCache = { accessToken: "", expiresAt: 0 };
 
-    // AUTH: pasuje do panelu (header X-Panel-Password)
-const token = (process.env.SEND_TOKEN || "").toString();
-const passHeader = (req.headers["x-panel-password"] || "").toString();
-const auth = (req.headers.authorization || "").toString();
-const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+async function getGraphAccessToken() {
+  const tenantId = must("M365_TENANT_ID");
+  const clientId = must("M365_CLIENT_ID");
+  const clientSecret = must("M365_CLIENT_SECRET");
 
-if (!token) {
-  return res.status(500).json({ ok: false, error: "Missing env: SEND_TOKEN" });
-}
-
-if (passHeader !== token && bearer !== token) {
-  return res.status(401).json({ ok: false, error: "Unauthorized" });
-}
-    const raw = await readRawBody(req);
-
-    let body;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return res.status(400).json({ ok: false, error: "Invalid JSON body" });
-    }
-
-    const {
-      csv,
-      html, // <-- HTML mailingu przychodzi z panelu
-      batchSize = 30,
-      delayMs = 4000,
-      subject,
-    } = body || {};
-
-    if (!csv || typeof csv !== "string") {
-      return res.status(400).json({ ok: false, error: "Missing csv in body" });
-    }
-
-    if (!html || typeof html !== "string" || !html.trim()) {
-      return res.status(400).json({ ok: false, error: "Missing html in body" });
-    }
-
-    const SMTP_HOST = must("SMTP_HOST");
-    const SMTP_PORT = Number(must("SMTP_PORT"));
-    const SMTP_USER = must("SMTP_USER");
-    const SMTP_PASS = must("SMTP_PASS");
-    const FROM_NAME = process.env.FROM_NAME || "N42 Group";
-    const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER;
-
-const transporter = nodemailer.createTransport({
-  host: "n42-pl.mail.protection.outlook.com",
-  port: 25,
-  secure: false,
-  tls: { minVersion: "TLSv1.2" },
-});
-
-const template = html;
-const recipients = parseRecipientsFromCSV(csv).filter((r) => r.email);
-
-    let sent = 0;
-
-    for (let i = 0; i < recipients.length; i += batchSize) {
-      const batch = recipients.slice(i, i + batchSize);
-
-      for (const r of batch) {
-        const personalized = template.replaceAll("{{name}}", r.name || "");
-await transporter.sendMail({
-  from: `"N42 Group" <n42@n42.pl>`,
-  to: "klient@gmail.com",
-  subject: "Test",
-  html: "<b>Test</b>",
-});
-
-        sent++;
-        await sleep(delayMs);
-      }
-
-      // mała przerwa między batchami (żeby nie wyglądało jak spam)
-      if (i + batchSize < recipients.length) await sleep(10000);
-    }
-
-    return res.status(200).json({ ok: true, sent });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).send(e?.stack || e?.message || String(e));
+  const now = Date.now();
+  if (tokenCache.accessToken && tokenCache.expiresAt > now + 60_000) {
+    return tokenCache.accessToken;
   }
+
+  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    scope: "https://graph.microsoft.com/.default",
+    grant_type: "client_credentials",
+  });
+
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(`Token error ${res.status}: ${JSON.stringify(json)}`);
+  }
+
+  tokenCache.accessToken = json.access_token;
+  tokenCache.expiresAt = Date.now() + (Number(json.expires_in || 3600) * 1000);
+  return tokenCache.accessToken;
 }
 
+async function graphSendMail({ accessToken, sender, fromName, toEmail, subject, html }) {
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`;
 
+  const payload = {
+    message: {
+      subject,
+      body: { contentType: "HTML", content: html },
+      toRecipients: [{ emailAddress: { address: toEmail } }],
+    },
+    saveToSentItems: true,
+  };
 
+  // "from" w Graph dla app-permissions jest związane z /users/{sender}, więc fromName to kosmetyka:
+  // nazwa nadawcy zwykle pochodzi z ustawień skrzynki / kontaktu. Zostawiamy subject/body/to.
+  // Jeśli chcesz, możemy dorobić wymuszenie displayName przez ustawienia mailboxa.
 
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(p
