@@ -301,14 +301,43 @@
     sendBtn.disabled = !(currentCSVText && currentHTMLText);
   }
 
+function detectDelimiter(text){
+  const firstLine = (text || "").split(/\r?\n/)[0] || "";
+  const commas = (firstLine.match(/,/g) || []).length;
+  const semicolons = (firstLine.match(/;/g) || []).length;
+  const tabs = (firstLine.match(/\t/g) || []).length;
+
+  if (tabs > semicolons && tabs > commas) return "\t";
+  if (semicolons > commas) return ";";
+  return ",";
+}
+
+function normalizeHeaderKey(s){
+  return String(s || "")
+    .replace(/^\uFEFF/, "")   // BOM
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")      // spacje
+    .replace(/[-_]/g, "");    // myślnik/podkreślenie
+}
+
+  
   function validateCSV(text){
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if(lines.length < 2) return { ok:false, error:"CSV ma za mało wierszy (min. 2: nagłówek + dane)." };
-    const header = lines[0].trim().toLowerCase();
-    const cols = header.split(",").map(x=>x.trim());
-    if(!cols.includes("email")) return { ok:false, error:"Nagłówek CSV musi zawierać kolumnę 'email'." };
-    return { ok:true, rows: lines.length - 1 };
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if(lines.length < 2) return { ok:false, error:"CSV ma za mało wierszy (min. 2: nagłówek + dane)." };
+
+  const delimiter = detectDelimiter(text);
+
+  const header = lines[0];
+  const cols = header.split(delimiter).map(normalizeHeaderKey);
+
+  // akceptuje: email / e-mail / e_mail / e mail
+  if(!cols.includes("email")) {
+    return { ok:false, error:"Nagłówek CSV musi zawierać kolumnę 'email'." };
   }
+
+  return { ok:true, rows: lines.length - 1, delimiter };
+}
 
   function validateHTML(text){
     const t = (text || "").trim();
@@ -539,5 +568,6 @@
 </script>
 </body>
 </html>
+
 
 
