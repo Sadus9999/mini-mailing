@@ -125,7 +125,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "Missing html in body" });
     }
 
-    const sender = must("n42@n42.pl");
+    const sender = must("M365_SENDER");
     const fromName = process.env.FROM_NAME || "N42 Group";
     const finalSubject = subject || process.env.SUBJECT || "Wiadomość";
 
@@ -167,4 +167,5 @@ export default async function handler(req, res) {
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
 
