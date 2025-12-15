@@ -79,4 +79,91 @@ async function graphSendMail({ accessToken, sender, fromName, toEmail, subject, 
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(p
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Graph sendMail ${res.status}: ${text}`);
+  }
+}
+
+export default async function handler(req, res) {
+  try {
+    if (req.method !== "POST") {
+      return res.status(405).json({ ok: false, error: "POST only" });
+    }
+
+    // AUTH do panelu (działa i z X-Panel-Password i z Authorization: Bearer)
+    const token = (process.env.SEND_TOKEN || "").toString();
+    const passHeader = (req.headers["x-panel-password"] || "").toString();
+    const auth = (req.headers.authorization || "").toString();
+    const bearer = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+
+    if (!token) {
+      return res.status(500).json({ ok: false, error: "Missing env: SEND_TOKEN" });
+    }
+    if (passHeader !== token && bearer !== token) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+
+    const raw = await readRawBody(req);
+
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ ok: false, error: "Invalid JSON body" });
+    }
+
+    const { csv, html, batchSize = 30, delayMs = 4000, subject } = body || {};
+
+    if (!csv || typeof csv !== "string") {
+      return res.status(400).json({ ok: false, error: "Missing csv in body" });
+    }
+    if (!html || typeof html !== "string" || !html.trim()) {
+      return res.status(400).json({ ok: false, error: "Missing html in body" });
+    }
+
+    const sender = must("M365_SENDER");
+    const fromName = process.env.FROM_NAME || "N42 Group";
+    const finalSubject = subject || process.env.SUBJECT || "Wiadomość";
+
+    const recipients = parseRecipientsFromCSV(csv)
+      .map((r) => ({
+        email: String(r.email || "").trim(),
+        name: String(r.name || "").trim(),
+      }))
+      .filter((r) => r.email && r.email.includes("@"));
+
+    const accessToken = await getGraphAccessToken();
+
+    let sent = 0;
+
+    for (let i = 0; i < recipients.length; i += batchSize) {
+      const batch = recipients.slice(i, i + batchSize);
+
+      for (const r of batch) {
+        const personalized = html.replaceAll("{{name}}", r.name || "");
+        await graphSendMail({
+          accessToken,
+          sender,
+          fromName,
+          toEmail: r.email,
+          subject: finalSubject,
+          html: personalized,
+        });
+
+        sent++;
+        await sleep(delayMs);
+      }
+
+      if (i + batchSize < recipients.length) await sleep(8000);
+    }
+
+    return res.status(200).json({ ok: true, sent });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send(e?.stack || e?.message || String(e));
+  }
+}
