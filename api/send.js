@@ -10,9 +10,18 @@ function must(name) {
 
 function detectDelimiter(text) {
   const firstLine = (text || "").split(/\r?\n/)[0] || "";
+
   const commas = (firstLine.match(/,/g) || []).length;
   const semicolons = (firstLine.match(/;/g) || []).length;
-  return semicolons > commas ? ";" : ",";
+  const tabs = (firstLine.match(/\t/g) || []).length;
+
+  // Najpierw wybierz separator, który faktycznie występuje
+  if (tabs > semicolons && tabs > commas) return "\t";
+  if (semicolons > commas) return ";";
+  if (commas > 0) return ",";
+
+  // Fallback (najczęściej comma)
+  return ",";
 }
 
 function parseRecipientsFromCSV(csvText) {
@@ -180,6 +189,7 @@ export default async function handler(req, res) {
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
 
 
 
