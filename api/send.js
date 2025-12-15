@@ -73,11 +73,9 @@ if (passHeader !== token && bearer !== token) {
     const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER;
 
 const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
+  host: "n42-pl.mail.protection.outlook.com",
+  port: 25,
   secure: false,
-  requireTLS: true,
-  auth: { user: SMTP_USER, pass: SMTP_PASS },
   tls: { minVersion: "TLSv1.2" },
 });
 
@@ -91,13 +89,12 @@ const recipients = parseRecipientsFromCSV(csv).filter((r) => r.email);
 
       for (const r of batch) {
         const personalized = template.replaceAll("{{name}}", r.name || "");
-        await transporter.sendMail({
-          from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-          to: r.email,
-          subject: subject || process.env.SUBJECT || "Wiadomość",
-          html: personalized,
-          text: "Wiadomość od N42 Group.",
-        });
+await transporter.sendMail({
+  from: `"N42 Group" <n42@n42.pl>`,
+  to: "klient@gmail.com",
+  subject: "Test",
+  html: "<b>Test</b>",
+});
 
         sent++;
         await sleep(delayMs);
@@ -113,6 +110,7 @@ const recipients = parseRecipientsFromCSV(csv).filter((r) => r.email);
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
 
 
 
