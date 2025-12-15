@@ -72,13 +72,14 @@ if (passHeader !== token && bearer !== token) {
     const FROM_NAME = process.env.FROM_NAME || "N42 Group";
     const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER;
 
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: false,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { minVersion: "TLSv1.2" },
-    });
+   const transporter = nodemailer.createTransport({
+   host: SMTP_HOST,          // smtp.office365.com
+   port: SMTP_PORT,          // 587
+   secure: false,            // STARTTLS (dla 587)
+   requireTLS: true,         // wymuś TLS (mniej losowych problemów)
+   auth: { user: SMTP_USER, pass: SMTP_PASS },
+   tls: { minVersion: "TLSv1.2" },
+   });
 
     await transporter.verify();
 
@@ -114,3 +115,4 @@ if (passHeader !== token && bearer !== token) {
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
