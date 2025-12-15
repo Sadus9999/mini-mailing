@@ -81,7 +81,12 @@ if (passHeader !== token && bearer !== token) {
    tls: { minVersion: "TLSv1.2" },
    });
 
-    await transporter.verify();
+    await transporter.sendMail({
+  from: `"N42 Group" <n42@n42.pl>`,
+  to: r.email,
+  subject,
+  html,
+});
 
     const template = html;
     const recipients = parseRecipientsFromCSV(csv).filter((r) => r.email);
@@ -115,4 +120,5 @@ if (passHeader !== token && bearer !== token) {
     return res.status(500).send(e?.stack || e?.message || String(e));
   }
 }
+
 
